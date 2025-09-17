@@ -12,6 +12,12 @@ interface VoiceOption {
   displayName: string;
 }
 
+interface ProcessedWord {
+  word: string;
+  language: string;
+  index: number;
+}
+
 const ReadingApp = () => {
   const [text, setText] = useState(`Hoje vamos aprender os nomes da família em francês. É um vocabulário fundamental e muito útil para qualquer conversa.
 
@@ -43,22 +49,21 @@ Neta: Petite-fille`);
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [selectedVoices, setSelectedVoices] = useState<{ [key: string]: string }>({
     'pt': '',
-    'fr': '',
-    'en': ''
+    'fr': ''
   });
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [speed, setSpeed] = useState([1]);
   const [currentUtterance, setCurrentUtterance] = useState<SpeechSynthesisUtterance | null>(null);
+  const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   
   const textRef = useRef<HTMLDivElement>(null);
-  const words = text.split(/\s+/);
 
   useEffect(() => {
     const loadVoices = () => {
       const availableVoices = speechSynthesis.getVoices();
       const voiceOptions: VoiceOption[] = [];
       
-      // Filter voices for Portuguese, French, and English
+      // Filter voices for Portuguese and French only
       availableVoices.forEach(voice => {
         if (voice.lang.startsWith('pt')) {
           voiceOptions.push({
@@ -72,12 +77,6 @@ Neta: Petite-fille`);
             language: 'fr',
             displayName: `🇫🇷 ${voice.name}`
           });
-        } else if (voice.lang.startsWith('en')) {
-          voiceOptions.push({
-            voice,
-            language: 'en',
-            displayName: `🇺🇸 ${voice.name}`
-          });
         }
       });
       
@@ -87,12 +86,10 @@ Neta: Petite-fille`);
       if (voiceOptions.length > 0) {
         const ptVoice = voiceOptions.find(v => v.language === 'pt');
         const frVoice = voiceOptions.find(v => v.language === 'fr');
-        const enVoice = voiceOptions.find(v => v.language === 'en');
         
         setSelectedVoices({
           'pt': ptVoice?.voice.name || '',
-          'fr': frVoice?.voice.name || '',
-          'en': enVoice?.voice.name || ''
+          'fr': frVoice?.voice.name || ''
         });
       }
     };
@@ -104,6 +101,17 @@ Neta: Petite-fille`);
       speechSynthesis.removeEventListener('voiceschanged', loadVoices);
     };
   }, []);
+
+  // Pre-process text to identify languages
+  useEffect(() => {
+    const words = text.split(/\s+/).filter(word => word.trim() !== '');
+    const processed: ProcessedWord[] = words.map((word, index) => ({
+      word,
+      language: detectLanguage(word),
+      index
+    }));
+    setProcessedWords(processed);
+  }, [text]);
 
   const detectLanguage = (word: string): string => {
     // Simple language detection based on common patterns
@@ -127,26 +135,29 @@ Neta: Petite-fille`);
       speechSynthesis.cancel();
       setIsPlaying(false);
       setCurrentWordIndex(-1);
+      setCurrentUtterance(null);
       return;
     }
+
+    if (processedWords.length === 0) return;
 
     setIsPlaying(true);
     let wordIndex = 0;
 
     const speakNextWord = () => {
-      if (wordIndex >= words.length) {
+      if (wordIndex >= processedWords.length || !isPlaying) {
         setIsPlaying(false);
         setCurrentWordIndex(-1);
+        setCurrentUtterance(null);
         return;
       }
 
-      const word = words[wordIndex];
-      const language = detectLanguage(word);
-      const selectedVoiceName = selectedVoices[language];
+      const processedWord = processedWords[wordIndex];
+      const selectedVoiceName = selectedVoices[processedWord.language];
       
       if (!selectedVoiceName) {
         wordIndex++;
-        speakNextWord();
+        setTimeout(speakNextWord, 50);
         return;
       }
 
@@ -154,11 +165,11 @@ Neta: Petite-fille`);
       
       if (!voice) {
         wordIndex++;
-        speakNextWord();
+        setTimeout(speakNextWord, 50);
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(word);
+      const utterance = new SpeechSynthesisUtterance(processedWord.word);
       utterance.voice = voice;
       utterance.rate = speed[0];
       utterance.pitch = 1;
@@ -168,13 +179,17 @@ Neta: Petite-fille`);
       setCurrentUtterance(utterance);
 
       utterance.onend = () => {
-        wordIndex++;
-        setTimeout(speakNextWord, 200); // Small pause between words
+        if (isPlaying) {
+          wordIndex++;
+          setTimeout(speakNextWord, 150);
+        }
       };
 
       utterance.onerror = () => {
-        wordIndex++;
-        speakNextWord();
+        if (isPlaying) {
+          wordIndex++;
+          setTimeout(speakNextWord, 50);
+        }
       };
 
       speechSynthesis.speak(utterance);
@@ -184,15 +199,15 @@ Neta: Petite-fille`);
   };
 
   const stopReading = () => {
-    speechSynthesis.cancel();
     setIsPlaying(false);
+    speechSynthesis.cancel();
     setCurrentWordIndex(-1);
     setCurrentUtterance(null);
   };
 
   const renderHighlightedText = () => (
     <div className="leading-relaxed text-lg">
-      {words.map((word, index) => (
+      {processedWords.map((processedWord, index) => (
         <span
           key={index}
           className={`${
@@ -200,14 +215,12 @@ Neta: Petite-fille`);
               ? 'bg-reading-highlight px-1 py-0.5 rounded transition-all duration-300'
               : ''
           } ${
-            detectLanguage(word) === 'fr'
+            processedWord.language === 'fr'
               ? 'text-languages-french font-medium'
-              : detectLanguage(word) === 'en'
-              ? 'text-languages-english font-medium'
               : 'text-reading-text'
           }`}
         >
-          {word}{' '}
+          {processedWord.word}{' '}
         </span>
       ))}
     </div>
@@ -231,7 +244,7 @@ Neta: Petite-fille`);
 
         {/* Controls */}
         <Card className="p-6 shadow-soft">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium mb-2 text-foreground">
                 🇧🇷 Voz Portuguesa
@@ -269,29 +282,6 @@ Neta: Petite-fille`);
                 <SelectContent>
                   {voices
                     .filter(v => v.language === 'fr')
-                    .map(v => (
-                      <SelectItem key={v.voice.name} value={v.voice.name}>
-                        {v.displayName}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2 text-foreground">
-                🇺🇸 Voz Inglesa
-              </label>
-              <Select
-                value={selectedVoices.en}
-                onValueChange={(value) => setSelectedVoices(prev => ({ ...prev, en: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma voz" />
-                </SelectTrigger>
-                <SelectContent>
-                  {voices
-                    .filter(v => v.language === 'en')
                     .map(v => (
                       <SelectItem key={v.voice.name} value={v.voice.name}>
                         {v.displayName}
@@ -365,14 +355,13 @@ Neta: Petite-fille`);
             {renderHighlightedText()}
           </div>
           
-          {currentWordIndex >= 0 && (
+          {currentWordIndex >= 0 && processedWords[currentWordIndex] && (
             <div className="mt-6 p-4 bg-primary/10 rounded-lg">
               <p className="text-sm text-muted-foreground">
-                Lendo palavra {currentWordIndex + 1} de {words.length}: 
-                <span className="font-semibold text-primary"> "{words[currentWordIndex]}"</span>
+                Lendo palavra {currentWordIndex + 1} de {processedWords.length}: 
+                <span className="font-semibold text-primary"> "{processedWords[currentWordIndex].word}"</span>
                 <span className="text-xs ml-2">
-                  ({detectLanguage(words[currentWordIndex]) === 'fr' ? '🇫🇷 Francês' : 
-                    detectLanguage(words[currentWordIndex]) === 'en' ? '🇺🇸 Inglês' : '🇧🇷 Português'})
+                  ({processedWords[currentWordIndex].language === 'fr' ? '🇫🇷 Francês' : '🇧🇷 Português'})
                 </span>
               </p>
             </div>
