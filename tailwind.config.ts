@@ -47,6 +47,16 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        reading: {
+          bg: "hsl(var(--reading-bg))",
+          text: "hsl(var(--reading-text))",
+          highlight: "hsl(var(--highlight))",
+        },
+        languages: {
+          french: "hsl(var(--french-accent))",
+          portuguese: "hsl(var(--portuguese-accent))",
+          english: "hsl(var(--english-accent))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -57,6 +67,13 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        'gradient-primary': 'var(--gradient-primary)',
+        'gradient-reading': 'var(--gradient-reading)',
+      },
+      boxShadow: {
+        'soft': 'var(--shadow-soft)',
       },
       borderRadius: {
         lg: "var(--radius)",
