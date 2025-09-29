@@ -65,11 +65,12 @@ Neta: Petite-fille`);
   const [activeLanguages, setActiveLanguages] = useState<string[]>(['pt', 'fr']);
   const [selectedVoices, setSelectedVoices] = useState<{ [key: string]: string }>({});
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
-  const [speed, setSpeed] = useState([1]);
+  const [speed, setSpeed] = useState([1.3]);
   const [currentUtterance, setCurrentUtterance] = useState<SpeechSynthesisUtterance | null>(null);
   const [processedWords, setProcessedWords] = useState<ProcessedWord[]>([]);
   
   const textRef = useRef<HTMLDivElement>(null);
+  const isSpeakingRef = useRef(false);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -199,6 +200,7 @@ Neta: Petite-fille`);
 
   const speakText = () => {
     if (isPlaying) {
+      isSpeakingRef.current = false;
       speechSynthesis.cancel();
       setIsPlaying(false);
       setCurrentWordIndex(-1);
@@ -209,14 +211,15 @@ Neta: Petite-fille`);
     if (processedWords.length === 0) return;
 
     setIsPlaying(true);
+    isSpeakingRef.current = true;
     let wordIndex = 0;
-    let isSpeaking = true;
 
     const speakNextWord = () => {
-      if (wordIndex >= processedWords.length || !isSpeaking) {
+      if (wordIndex >= processedWords.length || !isSpeakingRef.current) {
         setIsPlaying(false);
         setCurrentWordIndex(-1);
         setCurrentUtterance(null);
+        isSpeakingRef.current = false;
         return;
       }
 
@@ -247,14 +250,14 @@ Neta: Petite-fille`);
       setCurrentUtterance(utterance);
 
       utterance.onend = () => {
-        if (isSpeaking) {
+        if (isSpeakingRef.current) {
           wordIndex++;
-          setTimeout(() => speakNextWord(), 150);
+          setTimeout(() => speakNextWord(), 100);
         }
       };
 
       utterance.onerror = () => {
-        if (isSpeaking) {
+        if (isSpeakingRef.current) {
           wordIndex++;
           setTimeout(() => speakNextWord(), 50);
         }
@@ -263,27 +266,11 @@ Neta: Petite-fille`);
       speechSynthesis.speak(utterance);
     };
 
-    // Start speaking and update state tracking
-    const originalIsPlaying = isPlaying;
     speakNextWord();
-
-    // Create a closure to properly track the playing state
-    const checkStop = () => {
-      if (!isPlaying && originalIsPlaying) {
-        isSpeaking = false;
-      }
-    };
-    
-    // Check periodically if stop was pressed
-    const stopChecker = setInterval(() => {
-      checkStop();
-      if (!isSpeaking) {
-        clearInterval(stopChecker);
-      }
-    }, 100);
   };
 
   const stopReading = () => {
+    isSpeakingRef.current = false;
     setIsPlaying(false);
     speechSynthesis.cancel();
     setCurrentWordIndex(-1);
